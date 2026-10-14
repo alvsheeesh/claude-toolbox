@@ -1,0 +1,7 @@
+{
+  "name": "clean-view",
+  "version": "0.1.0",
+  "description": "Calm, friendly view: hides tool rows and shows a plain-English checklist of the plan above the prompt",
+  "author": { "name": "alvs" },
+  "types": "./types/index.d.ts"
+}

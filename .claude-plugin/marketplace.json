@@ -1,0 +1,12 @@
+{
+  "name": "claude-toolbox",
+  "owner": { "name": "alvsheeesh" },
+  "metadata": { "description": "Portable Claude Code toolbox: my own mods plus the outside ones I use" },
+  "plugins": [
+    { "name": "prompt-upgrade", "source": "./mods/prompt-upgrade", "description": "Turns a rough prompt into a great one before it runs" },
+    { "name": "auto-model", "source": "./mods/auto-model", "description": "Picks Haiku, Sonnet or Opus per prompt by how heavy it is" },
+    { "name": "clean-view", "source": "./mods/clean-view", "description": "Hides tool rows and shows a plain-English checklist above the prompt" },
+    { "name": "burn-meter", "source": { "source": "git-subdir", "url": "https://github.com/OneWave-AI/claude-code-mods.git", "path": "burn-meter" }, "description": "Session spend and plan limits as a band above the prompt (by OneWave AI)" },
+    { "name": "superpowers", "source": { "source": "github", "repo": "obra/superpowers" }, "description": "Disciplined build workflow: brainstorm, plan, TDD, review (by Jesse Vincent)" }
+  ]
+}
