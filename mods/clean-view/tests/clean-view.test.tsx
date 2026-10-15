@@ -26,6 +26,11 @@ function engineBeneath(on: On) {
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('tool.call', () => ({ result: 'ok' }))
   on('ui.toast', () => ({ value: undefined }))
+  // Beneath the plugin, the band is empty: no other mod draws in it.
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Box } = $.ui.resolve(e)
+    return <Box />
+  })
   on('classic.Notification', () => ({}))
   on('model.complete', () => ({
     value: {
@@ -179,6 +184,19 @@ test('a finished job says All done and collapses after 5 seconds', async ($, on)
   expect(collapsed).toContain('✓ All done')
   expect(collapsed).not.toContain('Done|')
   expect(collapsed).not.toContain('Answer your question')
+})
+
+test('a turn that ends waiting on the person shows the step as Paused, not as work', async ($, on) => {
+  engineBeneath(on)
+  await startJob($)
+  await $.tool.call({ tool: PLAN, tool_use_id: 'p-1', steps: ['Read your notes', 'Design the panel', 'Build it'] } as never)
+  await $.tool.call({ tool: REPORT, tool_use_id: 'r-1', task: 'Read your notes', percent: 100 } as never)
+  await $.tool.call({ tool: REPORT, tool_use_id: 'r-2', task: 'Design the panel', percent: 10 } as never)
+  await $.turn.complete({ answer: 'Does this look right?', durationMs: 1000, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+  const band = await bandText($)
+  expect(band).toContain('Needs you')
+  expect(band).toContain('Paused')
+  expect(band).not.toContain('10%')
 })
 
 test('Esc shows Stopped, an API error shows one calm sentence', async ($, on) => {

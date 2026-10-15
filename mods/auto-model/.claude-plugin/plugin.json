@@ -1,7 +1,7 @@
 {
   "name": "auto-model",
   "version": "0.1.0",
-  "description": "Picks Haiku, Sonnet or Opus and the effort for each prompt by how heavy the task is",
+  "description": "Picks Sonnet or Opus and the effort for each prompt by how heavy the task is",
   "author": { "name": "alvs" },
   "types": "./types/index.d.ts"
 }

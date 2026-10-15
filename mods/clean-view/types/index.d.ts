@@ -32,5 +32,9 @@ declare module 'claude-code' {
       checklist: CleanViewChecklist | null
       tick: number
     }
+    toolbox: {
+      /** True while the Toolbox's side panel shows, drawing the steps itself. */
+      hosting: boolean
+    }
   }
 }

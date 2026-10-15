@@ -1,0 +1,7 @@
+{
+  "name": "toolbox",
+  "version": "0.1.0",
+  "description": "One dock under the prompt (or above it) with the model and effort in use, the spend, Clean View's steps and a switch for each toolbox mod",
+  "author": { "name": "alvs" },
+  "types": "./types/index.d.ts"
+}

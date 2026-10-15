@@ -5,7 +5,7 @@
 set -euo pipefail
 
 REPO="${CLAUDE_TOOLBOX_REPO:-alvsheeesh/claude-toolbox}"
-ALL=(prompt-upgrade auto-model clean-view burn-meter superpowers)
+ALL=(prompt-upgrade auto-model clean-view toolbox burn-meter superpowers)
 PLUGINS=("${@:-${ALL[@]}}")
 
 command -v claude >/dev/null || { echo "Claude Code is not installed (no 'claude' on PATH)." >&2; exit 1; }

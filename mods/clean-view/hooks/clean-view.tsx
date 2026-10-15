@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, On, RenderChildren, Timer } from 'claude-code'
+import type { EngineInterface, On, RenderChildren, RenderInput, Timer } from 'claude-code'
 
 import type { CleanViewChecklist, CleanViewPhase, CleanViewTask } from '../types'
 
@@ -12,6 +12,8 @@ const COMMAND = 'simple'
 const enabledAtom = atom({ plugin: 'clean-view', key: 'cleanViewEnabled' } as const, true)
 const checklistAtom = atom({ plugin: 'clean-view', key: 'checklist' } as const, null)
 const tickAtom = atom({ plugin: 'clean-view', key: 'tick' } as const, 0)
+// The Toolbox's side panel draws the steps while it shows; the band then leaves them to it.
+const toolboxHostingAtom = atom({ plugin: 'toolbox', key: 'hosting' } as const, false)
 
 const ALWAYS_ALLOWED = new Set(['ToolSearch', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'AskUserQuestion'])
 
@@ -509,79 +511,106 @@ export function registerCleanView(on: On) {
   // ───────── The band above the prompt ─────────
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey) return next(e)
-
-    const isOn = await read($, enabledAtom)
-    const list = await read($, checklistAtom)
-    const frame = await read($, tickAtom)
-    const { Box, Text, Button } = $.ui.resolve(e)
-    const width = Math.max(20, e.props.bodyColumns)
-
-    const button = (
-      <Button
-        key="clean-view-toggle"
-        label={isOn ? '● Clean View: ON' : '○ Clean View: OFF'}
-        variant={isOn ? 'primary' : 'secondary'}
-        onPress={() => void toggle($)}
-      />
-    )
-    const headerRow = (left: RenderChildren) => (
-      <Box flexDirection="row" justifyContent="space-between" width={width}>
-        <Box flexShrink={1}>{left}</Box>
-        {button}
-      </Box>
-    )
-
-    if (!isOn || list === null) {
-      return headerRow(<Text> </Text>)
-    }
-
-    const now = await $.clock.now()
-    const elapsed = formatDuration((list.finishedAt ?? now) - list.startedAt)
-    const header = headerFor(Text, list, elapsed)
-
-    if (list.phase === 'done' && list.isCollapsed) {
-      return headerRow(header)
-    }
-
-    // Icon (2) + name + gap (1) + meter (10) + gap (2) + label (7) + right margin (1).
-    const nameWidth = Math.max(6, Math.min(MAX_NAME, width - 23))
-    const firstUpcoming = list.tasks.findIndex(t => t.status === 'upcoming')
-
+    if (e.props.hasSurvey || (await isHostedByToolbox($))) return next(e)
+    // Other mods draw in this band too: theirs goes under ours instead of being hidden.
+    const mine = await drawBand($, e)
+    const below = await next(e)
+    const { Box } = $.ui.resolve(e)
     return (
-      <Box flexDirection="column" width={width}>
-        {headerRow(header)}
-        {list.tasks.map((t, i) => {
-          const isActive = t.status === 'active'
-          const isDone = t.status === 'done'
-          const icon = isDone ? '✓' : isActive ? (list.phase === 'needs-you' ? '‖' : '▶') : '○'
-          const label = isDone
-            ? 'Done'
-            : isActive
-              ? t.hasReported
-                ? `${t.percent}%`
-                : 'Working'
-              : i === firstUpcoming
-                ? 'Next'
-                : 'Up next'
-          return (
-            <Box key={t.id} flexDirection="row">
-              <Text color={isDone ? 'green' : undefined} dimColor={!isDone && !isActive}>
-                {`${icon} `}
-              </Text>
-              <Text bold={isActive} dimColor={!isActive} wrap="truncate">
-                {fit(t.name, nameWidth)}
-              </Text>
-              <Text color={isDone ? 'green' : isActive ? 'cyan' : undefined} dimColor={!isDone && !isActive}>
-                {` ${meter(t, isActive && !t.hasReported, frame)}  `}
-              </Text>
-              <Text dimColor={!isActive}>{label}</Text>
-            </Box>
-          )
-        })}
+      <Box flexDirection="column">
+        {mine}
+        {below}
       </Box>
     )
   })
+}
+
+async function drawBand($: $, e: RenderInput<'AbovePrompt'>) {
+  const isOn = await read($, enabledAtom)
+  const list = await read($, checklistAtom)
+  const frame = await read($, tickAtom)
+  const { Box, Text, Button } = $.ui.resolve(e)
+  const width = Math.max(20, e.props.bodyColumns)
+
+  const button = (
+    <Button
+      key="clean-view-toggle"
+      label={isOn ? '● Clean View: ON' : '○ Clean View: OFF'}
+      variant={isOn ? 'primary' : 'secondary'}
+      onPress={() => void toggle($)}
+    />
+  )
+  const headerRow = (left: RenderChildren) => (
+    <Box flexDirection="row" justifyContent="space-between" width={width}>
+      <Box flexShrink={1}>{left}</Box>
+      {button}
+    </Box>
+  )
+
+  if (!isOn || list === null) {
+    return headerRow(<Text> </Text>)
+  }
+
+  const now = await $.clock.now()
+  const elapsed = formatDuration((list.finishedAt ?? now) - list.startedAt)
+  const header = headerFor(Text, list, elapsed)
+
+  if (list.phase === 'done' && list.isCollapsed) {
+    return headerRow(header)
+  }
+
+  // Icon (2) + name + gap (1) + meter (10) + gap (2) + label (7) + right margin (1).
+  const nameWidth = Math.max(6, Math.min(MAX_NAME, width - 23))
+  const firstUpcoming = list.tasks.findIndex(t => t.status === 'upcoming')
+
+  return (
+    <Box flexDirection="column" width={width}>
+      {headerRow(header)}
+      {list.tasks.map((t, i) => {
+        const isActive = t.status === 'active'
+        const isDone = t.status === 'done'
+        // Waiting on the person: the step is paused, so nothing on it moves or reads as work.
+        const isPaused = isActive && list.phase === 'needs-you'
+        const icon = isDone ? '✓' : isActive ? (isPaused ? '‖' : '▶') : '○'
+        const label = isDone
+          ? 'Done'
+          : isPaused
+            ? 'Paused'
+            : isActive
+            ? t.hasReported
+              ? `${t.percent}%`
+              : 'Working'
+            : i === firstUpcoming
+              ? 'Next'
+              : 'Up next'
+        return (
+          <Box key={t.id} flexDirection="row">
+            <Text color={isDone ? 'green' : undefined} dimColor={!isDone && !isActive}>
+              {`${icon} `}
+            </Text>
+            <Text bold={isActive} dimColor={!isActive} wrap="truncate">
+              {fit(t.name, nameWidth)}
+            </Text>
+            <Text color={isDone ? 'green' : isPaused ? 'yellow' : isActive ? 'cyan' : undefined} dimColor={!isDone && !isActive}>
+              {` ${meter(t, isActive && !isPaused && !t.hasReported, frame)}  `}
+            </Text>
+            <Text color={isPaused ? 'yellow' : undefined} dimColor={!isActive}>
+              {label}
+            </Text>
+          </Box>
+        )
+      })}
+    </Box>
+  )
+}
+
+/** A read of a plugin not loaded is refused: without the Toolbox, the band draws the steps. */
+async function isHostedByToolbox($: $) {
+  try {
+    return await read($, toolboxHostingAtom)
+  } catch {
+    return false
+  }
 }
 
 function fit(name: string, width: number): string {

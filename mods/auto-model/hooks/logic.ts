@@ -1,9 +1,14 @@
 import type { AutoModelDecision, AutoModelTier } from '../types'
 
+/**
+ * Full model ids: `turn.step` sends its model to the API as given, and the API
+ * answers 404 to an alias such as `haiku` (only `$.model.complete` resolves those).
+ * Sonnet is the floor: Haiku only sorts the prompt, it never answers one.
+ */
 export const TIERS: Record<AutoModelTier, { model: string; effort: AutoModelDecision['effort'] }> = {
-  light: { model: 'haiku', effort: null },
-  standard: { model: 'sonnet', effort: 'medium' },
-  heavy: { model: 'opus', effort: 'high' },
+  light: { model: 'claude-sonnet-5-5', effort: 'low' },
+  standard: { model: 'claude-sonnet-5-5', effort: 'medium' },
+  heavy: { model: 'claude-opus-5-5', effort: 'high' },
 }
 
 const RANK: Record<AutoModelTier, number> = { light: 0, standard: 1, heavy: 2 }
@@ -50,7 +55,14 @@ export function decide(
   return { tier: classified, ...TIERS[classified], why: 'classified' }
 }
 
+/** `claude-haiku-5-5` → `Haiku 5.5`. */
+export function displayName(model: string): string {
+  const m = model.match(/^claude-([a-z]+)-(\d+)-(\d+)/)
+  const base = m ? `${m[1]} ${m[2]}.${m[3]}` : model
+  return base.charAt(0).toUpperCase() + base.slice(1)
+}
+
 export function label(d: AutoModelDecision): string {
-  const name = d.model.charAt(0).toUpperCase() + d.model.slice(1)
+  const name = displayName(d.model)
   return d.effort === null ? `auto: ${name}` : `auto: ${name} · ${d.effort}`
 }

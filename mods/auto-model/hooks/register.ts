@@ -17,6 +17,8 @@ const lastAtom = atom({ plugin: 'auto-model', key: 'last' } as const, null)
 // What each main turn was asked, and what was picked for it (a turn's later steps reuse it).
 const texts = new Map<string, string>()
 const decisions = new Map<string, AutoModelDecision>()
+// The session's own model as the last main step had it, before any rewrite of ours.
+let sessionModel: string | undefined
 
 function remember<V>(map: Map<string, V>, key: string, value: V) {
   map.set(key, value)
@@ -66,7 +68,7 @@ export const register: Register = on => {
       return {
         text:
           word === 'on'
-            ? 'Auto-model is on: each prompt runs on Haiku, Sonnet or Opus by how heavy it is.'
+            ? 'Auto-model is on: each prompt runs on Sonnet or Opus by how heavy it is.'
             : 'Auto-model is off: prompts run on the model you chose with /model.',
       }
     }
@@ -77,6 +79,16 @@ export const register: Register = on => {
     return { text: `Auto-model is ${status}. ${lastLine} Use /auto on or /auto off.` }
   }).catch(() => ({ text: 'Auto-model hit a problem and changed nothing.' }))
 
+  // The person picking a model themselves wins: auto steps aside until /auto on.
+  on('command.run', { command: 'model' }, async ($, e, next) => {
+    const ran = await next(e)
+    if (e.args.trim() !== '' && (await read($, onAtom))) {
+      await setOn($, false)
+      $.ui.toast('Auto-model paused: you picked the model with /model. /auto on hands it back.')
+    }
+    return ran
+  }).catch(($, e, next) => next(e))
+
   on('turn.start', ($, e, next) => {
     if (e.agentId === undefined) remember(texts, e.turnId, e.text)
     return next(e)
@@ -84,7 +96,18 @@ export const register: Register = on => {
 
   on('turn.step', async function* ($, e, next) {
     // Subagents keep the model their definition asks for.
-    if (e.agentId !== undefined || !(await read($, onAtom))) return yield* next(e)
+    if (e.agentId !== undefined) return yield* next(e)
+
+    // The session's model moved since the last step: the person picked one (the /model menu).
+    const before = sessionModel
+    sessionModel = e.model
+    const isOn = await read($, onAtom)
+    if (isOn && before !== undefined && before !== e.model) {
+      await setOn($, false)
+      $.ui.toast('Auto-model paused: you picked the model with /model. /auto on hands it back.')
+      return yield* next(e)
+    }
+    if (!isOn) return yield* next(e)
 
     let picked = decisions.get(e.turnId)
     if (picked === undefined) {
